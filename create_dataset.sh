@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-scenflow_data_path=path-to-dataset/SceneFlow
+scenflow_data_path=/home/wpf/data/data_sf
 
-monkaa_frames_cleanpass=$scenflow_data_path"/monkaa/frames_cleanpass"
-monkaa_disparity=$scenflow_data_path"/monkaa/disparity"
-driving_frames_cleanpass=$scenflow_data_path"/driving/frames_cleanpass"
-driving_disparity=$scenflow_data_path"/driving/disparity"
-flyingthings3d_frames_cleanpass=$scenflow_data_path"/flyingthings3d/frames_cleanpass"
-flyingthings3d_disparity=$scenflow_data_path"/flyingthings3d/disparity"
+monkaa_frames_cleanpass=$scenflow_data_path"/monkaa_frames_cleanpass"
+monkaa_disparity=$scenflow_data_path"/monkaa_disparity"
+driving_frames_cleanpass=$scenflow_data_path"/driving_frames_cleanpass"
+driving_disparity=$scenflow_data_path"/driving_disparity"
+flyingthings3d_frames_cleanpass=$scenflow_data_path"/frames_cleanpass"
+flyingthings3d_disparity=$scenflow_data_path"/frames_disparity"
 
 mkdir dataset
 

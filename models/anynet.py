@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import math
 from .submodules import post_3dconvs,feature_extraction_conv
 import sys
+import numpy as np
 
 
 class AnyNet(nn.Module):
@@ -104,18 +105,20 @@ class AnyNet(nn.Module):
         assert maxdisp % stride == 0  # Assume maxdisp is multiple of stride
         cost = torch.zeros(feat_l.size()[0], maxdisp//stride, feat_l.size()[2], feat_l.size()[3]).cuda()
         for i in range(0, maxdisp, stride):
-            cost[:, i//stride, :, :i] = feat_l[:, :, :, :i].abs().sum(1)
             if i > 0:
+                cost[:, i//stride, :, :i] = feat_l[:, :, :, :i].abs().sum(1)
                 cost[:, i//stride, :, i:] = torch.norm(feat_l[:, :, :, i:] - feat_r[:, :, :, :-i], 1, 1)
             else:
-                cost[:, i//stride, :, i:] = torch.norm(feat_l[:, :, :, :] - feat_r[:, :, :, :], 1, 1)
+                cost[:, 0, :, :] = torch.norm(feat_l[:, :, :, :] - feat_r[:, :, :, :], 1, 1)
 
         return cost.contiguous()
 
     def _build_volume_2d3(self, feat_l, feat_r, maxdisp, disp, stride=1):
         size = feat_l.size()
         batch_disp = disp[:,None,:,:,:].repeat(1, maxdisp*2-1, 1, 1, 1).view(-1,1,size[-2], size[-1])
-        batch_shift = torch.arange(-maxdisp+1, maxdisp).repeat(size[0])[:,None,None,None].cuda() * stride
+        temp_array = np.tile(np.array(range(-maxdisp + 1, maxdisp)), size[0]) * stride
+        batch_shift = Variable(torch.Tensor(np.reshape(temp_array, [len(temp_array), 1, 1, 1])).cuda(), requires_grad=False)
+        # batch_shift = torch.arange(-maxdisp+1, maxdisp).repeat(size[0])[:,None,None,None].cuda() * stride
         batch_disp = batch_disp - batch_shift
         batch_feat_l = feat_l[:,None,:,:,:].repeat(1,maxdisp*2-1, 1, 1, 1).view(-1,size[-3],size[-2], size[-1])
         batch_feat_r = feat_r[:,None,:,:,:].repeat(1,maxdisp*2-1, 1, 1, 1).view(-1,size[-3],size[-2], size[-1])
@@ -174,7 +177,8 @@ class AnyNet(nn.Module):
 class disparityregression2(nn.Module):
     def __init__(self, start, end, stride=1):
         super(disparityregression2, self).__init__()
-        self.disp = Variable(torch.arange(start*stride, end*stride, stride).view(1, -1, 1, 1).cuda(), requires_grad=False)
+        temp_array = np.array(range(start * stride, end * stride, stride))
+        self.disp = Variable(torch.Tensor(np.reshape(temp_array, [1,len(temp_array),1,1])).cuda(), requires_grad=False)
 
     def forward(self, x):
         disp = self.disp.repeat(x.size()[0], 1, x.size()[2], x.size()[3])

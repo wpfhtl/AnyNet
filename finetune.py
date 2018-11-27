@@ -19,7 +19,7 @@ parser.add_argument('--loss_weights', type=float, nargs='+', default=[0.25, 0.5,
 parser.add_argument('--max_disparity', type=int, default=192)
 parser.add_argument('--maxdisplist', type=int, nargs='+', default=[12, 3, 3])
 parser.add_argument('--datatype', default='2015',
-                    help='datapath')
+                    help='2015 or 2012')
 parser.add_argument('--datapath', default=None, help='datapath')
 parser.add_argument('--epochs', type=int, default=300,
                     help='number of epochs to train')
@@ -27,7 +27,7 @@ parser.add_argument('--train_bsize', type=int, default=6,
                     help='batch size for training (default: 6)')
 parser.add_argument('--test_bsize', type=int, default=8,
                     help='batch size for testing (default: 8)')
-parser.add_argument('--save_path', type=str, default='results/finetune_anynet',
+parser.add_argument('--save_path', type=str, default='results/finetune_anynet/',
                     help='the path of saving checkpoints and log')
 parser.add_argument('--resume', type=str, default=None,
                     help='resume path')
@@ -42,11 +42,16 @@ parser.add_argument('--layers_3d', type=int, default=4, help='number of initial 
 parser.add_argument('--growth_rate', type=int, nargs='+', default=[4,1,1], help='growth rate in the 3d network')
 parser.add_argument('--spn_init_channels', type=int, default=8, help='initial channels for spnet')
 parser.add_argument('--start_epoch_for_spn', type=int, default=121)
-parser.add_argument('--pretrained', type=str, default='results/pretrained_anynet/checkpoint.tar',
+parser.add_argument('--loadmodel', type=str, default='results/pretrained_anynet/checkpoint.tar',
                     help='pretrained model path')
+parser.add_argument('--start_epoch', type=int, default=1, help='start epoch')
+parser.add_argument('--gpuid', type=str, default='0', help='the id of gpu to use')
 
 
 args = parser.parse_args()
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
+gpuid = args.gpuid
+print("use gpu {}".format(gpuid))
 
 if args.datatype == '2015':
     from dataloader import KITTIloader2015 as ls
@@ -79,38 +84,86 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
     log.info('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
-    if args.pretrained:
-        if os.path.isfile(args.pretrained):
-            checkpoint = torch.load(args.pretrained)
-            model.load_state_dict(checkpoint['state_dict'])
-            log.info("=> loaded pretrained model '{}'"
-                     .format(args.pretrained))
-        else:
-            log.info("=> no pretrained model found at '{}'".format(args.pretrained))
-            log.info("=> Will start from scratch.")
-    args.start_epoch = 0
-    if args.resume:
-        if os.path.isfile(args.resume):
-            log.info("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            log.info("=> loaded checkpoint '{}' (epoch {})"
-                     .format(args.resume, checkpoint['epoch']))
-        else:
-            log.info("=> no checkpoint found at '{}'".format(args.resume))
-            log.info("=> Will start from scratch.")
+    num_pretrain_items = 0
+    num_model_items = 0
+    # if args.loadpremodel is not None:
+    #     pretrained_dict = torch.load(args.loadpremodel)
+    #     # start_epoch = pretrained_dict['epoch'] + 1
+    #     model_dict = model.state_dict()
+    #     print('pretrained dict: ' + args.loadpremodel + ' : ' + str(len(pretrained_dict['state_dict'])))
+    #     for k, v in pretrained_dict['state_dict'].items():
+    #         print(k, v.shape)
+    #     print('model dict: ' + str(len(model_dict)))
+    #     for k, v in model_dict.items():
+    #         print(k, v.shape)
+    #     pretrained_dict = {k: v for k, v in pretrained_dict['state_dict'].items() if k in model_dict}
+    #     num_pretrain_items = len(pretrained_dict.items())
+    #     num_model_items = len(model_dict.items())
+    #     print('Number of pretrained items: {:d}'.format(num_pretrain_items))
+    #     print('Number of model items: {:d}'.format(num_model_items))
+    #     model_dict.update(pretrained_dict)
+    #     model.load_state_dict(model_dict)
+    #     # state_dict = torch.load(args.loadpremodel)
+    #     # model.load_state_dict(state_dict['state_dict'])
+
+    if args.loadmodel is not None:
+        pretrained_dict = torch.load(args.loadmodel)
+        # start_epoch = pretrained_dict['epoch'] + 1
+        model_dict = model.state_dict()
+        pretrained_dict = {k: v for k, v in pretrained_dict['state_dict'].items() if k in model_dict}
+        num_pretrain_items = len(pretrained_dict.items())
+        num_model_items = len(model_dict.items())
+        print('Number of loaded items: {:d}'.format(num_pretrain_items))
+        print('Number of model items: {:d}'.format(num_model_items))
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
+        # state_dict = torch.load(args.loadmodel)
+        # model.load_state_dict(state_dict['state_dict'])
     else:
-        log.info('Not Resume')
+        start_epoch = 1
+        model_dict = model.state_dict()
+        num_model_items = len(model_dict.items())
+        print('Number of model items: {:d}'.format(num_model_items))
+
+    if args.start_epoch is not 1:
+        start_epoch = args.start_epoch
+    else:
+        start_epoch = 1
+    print(model)
+    print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
+
+    # if args.pretrained:
+    #     if os.path.isfile(args.pretrained):
+    #         checkpoint = torch.load(args.pretrained)
+    #         model.load_state_dict(checkpoint['state_dict'])
+    #         log.info("=> loaded pretrained model '{}'"
+    #                  .format(args.pretrained))
+    #     else:
+    #         log.info("=> no pretrained model found at '{}'".format(args.pretrained))
+    #         log.info("=> Will start from scratch.")
+    # args.start_epoch = 0
+    # if args.resume:
+    #     if os.path.isfile(args.resume):
+    #         log.info("=> loading checkpoint '{}'".format(args.resume))
+    #         checkpoint = torch.load(args.resume)
+    #         model.load_state_dict(checkpoint['state_dict'])
+    #         optimizer.load_state_dict(checkpoint['optimizer'])
+    #         log.info("=> loaded checkpoint '{}' (epoch {})"
+    #                  .format(args.resume, checkpoint['epoch']))
+    #     else:
+    #         log.info("=> no checkpoint found at '{}'".format(args.resume))
+    #         log.info("=> Will start from scratch.")
+    # else:
+    #     log.info('Not Resume')
 
     start_full_time = time.time()
-    for epoch in range(args.start_epoch, args.epochs):
+    for epoch in range(start_epoch, args.epochs + 1):
         log.info('This is {}-th epoch'.format(epoch))
         adjust_learning_rate(optimizer, epoch)
 
         train(TrainImgLoader, model, optimizer, log, epoch)
 
-        savefilename = args.save_path + '/checkpoint.tar'
+        savefilename = args.save_path + 'kitti_' + args.datatype + '_' + str(epoch) + '.tar'
         torch.save({
             'epoch': epoch,
             'state_dict': model.state_dict(),
@@ -124,7 +177,7 @@ def main():
     log.info('full training time = {:.2f} Hours'.format((time.time() - start_full_time) / 3600))
 
 
-def train(dataloader, model, optimizer, log, epoch=0):
+def train(dataloader, model, optimizer, log, epoch=1):
 
     stages = 3 + args.with_spn
     losses = [AverageMeter() for _ in range(stages)]
